@@ -1,8 +1,9 @@
-import { YouTubeVideo } from '../classes/Video';
-import { YouTubePlayList } from '../classes/Playlist';
 import { YouTubeChannel } from '../classes/Channel';
-import { YouTube } from '..';
+import { YouTubePlayList } from '../classes/Playlist';
 import { YouTubeThumbnail } from '../classes/Thumbnail';
+import { YouTubeVideo } from '../classes/Video';
+
+type YouTube = YouTubeVideo | YouTubeChannel | YouTubePlayList;
 
 const BLURRED_THUMBNAILS = [
     '-oaymwEpCOADEI4CSFryq4qpAxsIARUAAAAAGAElAADIQj0AgKJDeAHtAZmZGUI=',
