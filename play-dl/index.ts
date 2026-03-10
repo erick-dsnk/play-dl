@@ -118,7 +118,7 @@ async function stream(url: string, options: StreamOptions = {}): Promise<YouTube
             } is not supported. Please use search() to find a similar track on YouTube or SoundCloud instead.`
         );
     }
-    if (platform === 'soundcloud') return await so_stream(url_, options.quality);
+    if (platform === 'soundcloud') return await so_stream(url_, options);
     return await yt_stream(url_, options);
 }
 
@@ -253,7 +253,7 @@ async function stream_from_info(
     info: InfoData | SoundCloudTrack,
     options: StreamOptions = {}
 ): Promise<YouTubeStream | SoundCloudStream> {
-    if (info instanceof SoundCloudTrack) return await so_stream_info(info, options.quality);
+    if (info instanceof SoundCloudTrack) return await so_stream_info(info, options);
     else return await yt_stream_info(info, options);
 }
 /**
@@ -347,28 +347,39 @@ export {
     attachListeners,
     authorization,
     decipher_info,
-    deezer, DeezerAlbum,
+    deezer,
+    DeezerAlbum,
     DeezerPlaylist,
-    DeezerTrack, dz_advanced_track_search,
+    DeezerTrack,
+    dz_advanced_track_search,
     dz_validate,
     extractID,
-    getFreeClientID, InfoData, is_expired,
+    getFreeClientID,
+    InfoData,
+    is_expired,
     playlist_info,
     refreshToken,
     search,
     setToken,
     so_validate,
-    soundcloud, SoundCloudPlaylist,
+    soundcloud,
+    SoundCloudPlaylist,
     SoundCloudStream,
-    SoundCloudTrack, sp_validate, spotify, SpotifyAlbum,
+    SoundCloudTrack,
+    sp_validate,
+    spotify,
+    SpotifyAlbum,
     SpotifyPlaylist,
-    SpotifyTrack, stream,
+    SpotifyTrack,
+    stream,
     stream_from_info,
     validate,
     video_basic_info,
-    video_info, YouTubeChannel,
+    video_info,
+    YouTubeChannel,
     YouTubePlayList,
-    YouTubeVideo, yt_validate
+    YouTubeVideo,
+    yt_validate
 };
 
 // Export Types
