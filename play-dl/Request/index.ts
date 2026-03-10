@@ -1,8 +1,7 @@
 import { IncomingMessage } from 'node:http';
 import { RequestOptions, request as httpsRequest } from 'node:https';
 import { URL } from 'node:url';
-import { BrotliDecompress, Deflate, Gunzip, createGunzip, createBrotliDecompress, createDeflate } from 'node:zlib';
-import { cookieHeaders, getCookies } from '../YouTube/utils/cookie';
+import { BrotliDecompress, Deflate, Gunzip, createBrotliDecompress, createDeflate, createGunzip } from 'node:zlib';
 import { getRandomUserAgent } from './useragent';
 
 interface RequestOpts extends RequestOptions {
@@ -10,6 +9,58 @@ interface RequestOpts extends RequestOptions {
     method?: 'GET' | 'POST' | 'HEAD';
     cookies?: boolean;
     cookieJar?: { [key: string]: string };
+    /** When cookies is true, optionally provide a function to get cookie header string. */
+    getCookies?: () => string | undefined;
+    /** When cookies is true, optionally called with set-cookie headers from response. */
+    onSetCookie?: (headers: string[]) => void;
+}
+
+/**
+ * Makes an HTTPS request and follows redirects (3xx).
+ * @param req_url URL to request
+ * @param options Request options
+ * @param rejectOn4xx If true, reject when status code > 400
+ * @returns The final response after following redirects
+ */
+async function followRedirects(req_url: string, options: RequestOpts, rejectOn4xx: boolean): Promise<IncomingMessage> {
+    const res = await https_getter(req_url, options).catch((err: Error) => err);
+    if (res instanceof Error) throw res;
+    const status = Number(res.statusCode);
+    if (status >= 300 && status < 400) {
+        return followRedirects(res.headers.location as string, options, rejectOn4xx);
+    }
+    if (rejectOn4xx && status > 400) {
+        throw new Error(`Got ${res.statusCode} from the request`);
+    }
+    return res;
+}
+
+/**
+ * Reads the response body and handles gzip/deflate/br decoding.
+ */
+function readResponseBody(res: IncomingMessage): Promise<string> {
+    const data: string[] = [];
+    const encoding = res.headers['content-encoding'];
+    let decoder: BrotliDecompress | Gunzip | Deflate | undefined;
+    if (encoding === 'gzip') decoder = createGunzip();
+    else if (encoding === 'br') decoder = createBrotliDecompress();
+    else if (encoding === 'deflate') decoder = createDeflate();
+
+    if (decoder) {
+        res.pipe(decoder);
+        decoder.setEncoding('utf-8');
+        decoder.on('data', (c) => data.push(c));
+        return new Promise((resolve, reject) => {
+            decoder!.on('end', () => resolve(data.join('')));
+            decoder!.on('error', reject);
+        });
+    }
+    res.setEncoding('utf-8');
+    res.on('data', (c) => data.push(c));
+    return new Promise((resolve, reject) => {
+        res.on('end', () => resolve(data.join('')));
+        res.on('error', reject);
+    });
 }
 
 /**
@@ -19,39 +70,14 @@ interface RequestOpts extends RequestOptions {
  * @returns IncomingMessage from the request
  */
 export function request_stream(req_url: string, options: RequestOpts = { method: 'GET' }): Promise<IncomingMessage> {
-    return new Promise(async (resolve, reject) => {
-        let res = await https_getter(req_url, options).catch((err: Error) => err);
-        if (res instanceof Error) {
-            reject(res);
-            return;
-        }
-        if (Number(res.statusCode) >= 300 && Number(res.statusCode) < 400) {
-            res = await request_stream(res.headers.location as string, options);
-        }
-        resolve(res);
-    });
+    return followRedirects(req_url, options, false);
 }
+
 /**
- * Makes a request and follows redirects if necessary
- * @param req_url URL to make https request to
- * @param options Request options for https request
- * @returns A promise with the final response object
+ * Makes a request and follows redirects if necessary (rejects on 4xx/5xx).
  */
 function internalRequest(req_url: string, options: RequestOpts = { method: 'GET' }): Promise<IncomingMessage> {
-    return new Promise(async (resolve, reject) => {
-        let res = await https_getter(req_url, options).catch((err: Error) => err);
-        if (res instanceof Error) {
-            reject(res);
-            return;
-        }
-        if (Number(res.statusCode) >= 300 && Number(res.statusCode) < 400) {
-            res = await internalRequest(res.headers.location as string, options);
-        } else if (Number(res.statusCode) > 400) {
-            reject(new Error(`Got ${res.statusCode} from the request`));
-            return;
-        }
-        resolve(res);
-    });
+    return followRedirects(req_url, options, true);
 }
 /**
  * Main module which play-dl uses to make a request
@@ -63,8 +89,9 @@ export function request(req_url: string, options: RequestOpts = { method: 'GET' 
     return new Promise(async (resolve, reject) => {
         let cookies_added = false;
         if (options.cookies) {
-            let cook = getCookies();
-            if (typeof cook === 'string' && options.headers) {
+            let cook = options.getCookies?.();
+            if (typeof cook === 'string' && cook.length > 0) {
+                if (!options.headers) options.headers = {};
                 Object.assign(options.headers, { cookie: cook });
                 cookies_added = true;
             }
@@ -100,27 +127,11 @@ export function request(req_url: string, options: RequestOpts = { method: 'GET' 
                     options.cookieJar[parts.shift() as string] = parts.join('=');
                 }
             }
-            if (cookies_added) {
-                cookieHeaders(res.headers['set-cookie']);
+            if (cookies_added && options.onSetCookie) {
+                options.onSetCookie(res.headers['set-cookie']);
             }
         }
-        const data: string[] = [];
-        let decoder: BrotliDecompress | Gunzip | Deflate | undefined = undefined;
-        const encoding = res.headers['content-encoding'];
-        if (encoding === 'gzip') decoder = createGunzip();
-        else if (encoding === 'br') decoder = createBrotliDecompress();
-        else if (encoding === 'deflate') decoder = createDeflate();
-
-        if (decoder) {
-            res.pipe(decoder);
-            decoder.setEncoding('utf-8');
-            decoder.on('data', (c) => data.push(c));
-            decoder.on('end', () => resolve(data.join('')));
-        } else {
-            res.setEncoding('utf-8');
-            res.on('data', (c) => data.push(c));
-            res.on('end', () => resolve(data.join('')));
-        }
+        readResponseBody(res).then(resolve).catch(reject);
     });
 }
 
