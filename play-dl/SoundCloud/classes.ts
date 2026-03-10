@@ -412,11 +412,21 @@ export class SoundCloudStream {
      */
     private segment_urls: string[];
     /**
+     * Seek position in seconds. When set, segments before this time are skipped on start.
+     * @private
+     */
+    private seekSeconds: number;
+    /**
      * Constructor for SoundCloud Stream
      * @param url Dash url containing dash file.
      * @param type Stream Type
+     * @param seekOptions Optional seek options (seek position in seconds, durationInSec for validation is done by caller).
      */
-    constructor(url: string, type: StreamType = StreamType.Arbitrary) {
+    constructor(
+        url: string,
+        type: StreamType = StreamType.Arbitrary,
+        seekOptions?: { seek?: number; durationInSec?: number }
+    ) {
         this.stream = new Readable({ highWaterMark: 5 * 1000 * 1000, read() {} });
         this.type = type;
         this.url = url;
@@ -424,6 +434,7 @@ export class SoundCloudStream {
         this.request = null;
         this.downloaded_segments = 0;
         this.time = [];
+        this.seekSeconds = seekOptions?.seek ?? 0;
         this.timer = new Timer(() => {
             this.timer.reuse();
             this.start();
@@ -464,8 +475,21 @@ export class SoundCloudStream {
         this.time = [];
         this.segment_urls = [];
         this.downloaded_time = 0;
+        this.downloaded_segments = 0;
         await this.parser();
-        this.segment_urls.splice(0, this.downloaded_segments);
+        if (this.seekSeconds > 0) {
+            while (
+                this.time.length > 0 &&
+                this.segment_urls.length > 0 &&
+                this.downloaded_time + this.time[0] <= this.seekSeconds
+            ) {
+                this.downloaded_time += this.time.shift() as number;
+                this.segment_urls.shift();
+                this.downloaded_segments++;
+            }
+        } else {
+            this.segment_urls.splice(0, this.downloaded_segments);
+        }
         this.loop();
     }
     /**
