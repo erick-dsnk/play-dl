@@ -1,6 +1,6 @@
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { request } from '../Request';
 import { SpotifyAlbum, SpotifyPlaylist, SpotifyTrack } from './classes';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 
 let spotifyData: SpotifyDataOptions;
 if (existsSync('.data/spotify.data')) {
@@ -56,10 +56,11 @@ export async function spotify(url: string): Promise<Spotify> {
         });
         if (response instanceof Error) throw response;
         const resObj = JSON.parse(response);
-        if (resObj.error) throw new Error(`Got ${resObj.error.status} from the spotify request: ${resObj.error.message}`);
+        if (resObj.error)
+            throw new Error(`Got ${resObj.error.status} from the spotify request: ${resObj.error.message}`);
         return new SpotifyTrack(resObj);
     } else if (url_.indexOf('album/') !== -1) {
-        const albumID = url.split('album/')[1].split('&')[0].split('?')[0];
+        const albumID = url_.split('album/')[1].split('&')[0].split('?')[0];
         const response = await request(`https://api.spotify.com/v1/albums/${albumID}?market=${spotifyData.market}`, {
             headers: {
                 Authorization: `${spotifyData.token_type} ${spotifyData.access_token}`
@@ -69,10 +70,11 @@ export async function spotify(url: string): Promise<Spotify> {
         });
         if (response instanceof Error) throw response;
         const resObj = JSON.parse(response);
-        if (resObj.error) throw new Error(`Got ${resObj.error.status} from the spotify request: ${resObj.error.message}`);
+        if (resObj.error)
+            throw new Error(`Got ${resObj.error.status} from the spotify request: ${resObj.error.message}`);
         return new SpotifyAlbum(resObj, spotifyData, false);
     } else if (url_.indexOf('playlist/') !== -1) {
-        const playlistID = url.split('playlist/')[1].split('&')[0].split('?')[0];
+        const playlistID = url_.split('playlist/')[1].split('&')[0].split('?')[0];
         const response = await request(
             `https://api.spotify.com/v1/playlists/${playlistID}?market=${spotifyData.market}`,
             {
@@ -85,7 +87,8 @@ export async function spotify(url: string): Promise<Spotify> {
         });
         if (response instanceof Error) throw response;
         const resObj = JSON.parse(response);
-        if (resObj.error) throw new Error(`Got ${resObj.error.status} from the spotify request: ${resObj.error.message}`);
+        if (resObj.error)
+            throw new Error(`Got ${resObj.error.status} from the spotify request: ${resObj.error.message}`);
         return new SpotifyPlaylist(resObj, spotifyData, false);
     } else throw new Error('URL is out of scope for play-dl.');
 }
@@ -251,4 +254,5 @@ export async function setSpotifyToken(options: SpotifyDataOptions) {
     await refreshToken();
 }
 
-export { SpotifyTrack, SpotifyAlbum, SpotifyPlaylist };
+export { SpotifyAlbum, SpotifyPlaylist, SpotifyTrack };
+
