@@ -1,7 +1,7 @@
-import { request, request_stream } from '../Request';
-import { Readable } from 'node:stream';
 import { IncomingMessage } from 'node:http';
-import { StreamType } from '../YouTube/stream';
+import { Readable } from 'node:stream';
+import { StreamType } from '../common/types';
+import { request, request_stream } from '../Request';
 import { Timer } from '../YouTube/classes/LiveStream';
 import { PlaylistJSON, SoundTrackJSON } from './constants';
 
