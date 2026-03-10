@@ -12,7 +12,8 @@
         "build": "tsup",
         "build:check": "tsc --noEmit --incremental false",
         "pretty": "prettier --config .prettierrc \"play-dl/*.ts\" \"play-dl/*/*.ts\" \"play-dl/*/*/*.ts\" --write ",
-        "prepublishOnly": "tsup"
+        "prepublishOnly": "tsup",
+        "prepare": "npm run build"
     },
     "repository": {
         "type": "git",
