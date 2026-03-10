@@ -1,8 +1,8 @@
-import { getPlaylistVideos, getContinuationToken } from '../utils/extractor';
 import { request } from '../../Request';
+import { getContinuationToken, getPlaylistVideos } from '../utils/playlist';
 import { YouTubeChannel } from './Channel';
-import { YouTubeVideo } from './Video';
 import { YouTubeThumbnail } from './Thumbnail';
+import { YouTubeVideo } from './Video';
 const BASE_API = 'https://www.youtube.com/youtubei/v1/browse?key=';
 /**
  * YouTube Playlist Class containing vital informations about playlist.
