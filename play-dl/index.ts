@@ -1,53 +1,52 @@
+import { getPlatform } from './common/url';
 import {
+    deezer,
+    Deezer,
+    DeezerAlbum,
+    DeezerPlaylist,
+    DeezerTrack,
+    dz_advanced_track_search,
+    dz_search,
+    dz_validate
+} from './Deezer';
+import {
+    getFreeClientID,
+    so_search,
+    stream as so_stream,
+    stream_from_info as so_stream_info,
+    so_validate,
+    soundcloud,
+    SoundCloud,
+    SoundCloudPlaylist,
+    SoundCloudStream,
+    SoundCloudTrack
+} from './SoundCloud';
+import {
+    is_expired,
+    refreshToken,
+    sp_search,
+    sp_validate,
+    spotify,
+    Spotify,
+    SpotifyAlbum,
+    SpotifyPlaylist,
+    SpotifyTrack
+} from './Spotify';
+import { setToken } from './token';
+import {
+    decipher_info,
+    extractID,
+    InfoData,
     playlist_info,
     video_basic_info,
     video_info,
-    decipher_info,
-    yt_validate,
-    extractID,
     YouTube,
-    YouTubeStream,
     YouTubeChannel,
     YouTubePlayList,
+    YouTubeStream,
     YouTubeVideo,
-    InfoData
+    yt_validate
 } from './YouTube';
-import {
-    spotify,
-    sp_validate,
-    refreshToken,
-    is_expired,
-    SpotifyAlbum,
-    SpotifyPlaylist,
-    SpotifyTrack,
-    Spotify,
-    SpotifyAuthorize,
-    sp_search
-} from './Spotify';
-import {
-    soundcloud,
-    so_validate,
-    SoundCloud,
-    SoundCloudStream,
-    getFreeClientID,
-    SoundCloudPlaylist,
-    SoundCloudTrack,
-    check_id,
-    so_search,
-    stream as so_stream,
-    stream_from_info as so_stream_info
-} from './SoundCloud';
-import {
-    deezer,
-    dz_validate,
-    dz_advanced_track_search,
-    Deezer,
-    DeezerTrack,
-    DeezerPlaylist,
-    DeezerAlbum,
-    dz_search
-} from './Deezer';
-import { setToken } from './token';
 
 enum AudioPlayerStatus {
     Idle = 'idle',
@@ -74,11 +73,10 @@ interface SearchOptions {
     unblurNSFWThumbnails?: boolean;
 }
 
-import { createInterface } from 'node:readline';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { stream as yt_stream, StreamOptions, stream_from_info as yt_stream_info } from './YouTube/stream';
-import { yt_search } from './YouTube/search';
 import { EventEmitter } from 'stream';
+import { authorization } from './authorization';
+import { yt_search } from './YouTube/search';
+import { StreamOptions, stream as yt_stream, stream_from_info as yt_stream_info } from './YouTube/stream';
 
 async function stream(url: string, options: { seek?: number } & StreamOptions): Promise<YouTubeStream>;
 async function stream(url: string, options?: StreamOptions): Promise<YouTubeStream | SoundCloudStream>;
@@ -112,18 +110,16 @@ async function stream(url: string, options: StreamOptions = {}): Promise<YouTube
     const url_ = url.trim();
     if (url_.length === 0) throw new Error('Stream URL has a length of 0. Check your url again.');
     if (options.htmldata) return await yt_stream(url_, options);
-    if (url_.indexOf('spotify') !== -1) {
+    const platform = getPlatform(url_);
+    if (platform === 'spotify' || platform === 'deezer') {
         throw new Error(
-            'Streaming from Spotify is not supported. Please use search() to find a similar track on YouTube or SoundCloud instead.'
+            `Streaming from ${
+                platform === 'spotify' ? 'Spotify' : 'Deezer'
+            } is not supported. Please use search() to find a similar track on YouTube or SoundCloud instead.`
         );
     }
-    if (url_.indexOf('deezer') !== -1) {
-        throw new Error(
-            'Streaming from Deezer is not supported. Please use search() to find a similar track on YouTube or SoundCloud instead.'
-        );
-    }
-    if (url_.indexOf('soundcloud') !== -1) return await so_stream(url_, options.quality);
-    else return await yt_stream(url_, options);
+    if (platform === 'soundcloud') return await so_stream(url_, options.quality);
+    return await yt_stream(url_, options);
 }
 
 async function search(query: string, options: { source: { deezer: 'album' } } & SearchOptions): Promise<DeezerAlbum[]>;
@@ -292,144 +288,24 @@ async function validate(
     let check;
     const url_ = url.trim();
     if (!url_.startsWith('https')) return 'search';
-    if (url_.indexOf('spotify') !== -1) {
+    const platform = getPlatform(url_);
+    if (platform === 'spotify') {
         check = sp_validate(url_);
         return check !== false ? (('sp_' + check) as 'sp_track' | 'sp_album' | 'sp_playlist') : false;
-    } else if (url_.indexOf('soundcloud') !== -1) {
+    }
+    if (platform === 'soundcloud') {
         check = await so_validate(url_);
         return check !== false ? (('so_' + check) as 'so_playlist' | 'so_track') : false;
-    } else if (url_.indexOf('deezer') !== -1) {
+    }
+    if (platform === 'deezer') {
         check = await dz_validate(url_);
         return check !== false ? (('dz_' + check) as 'dz_track' | 'dz_playlist' | 'dz_album') : false;
-    } else {
+    }
+    if (platform === 'youtube') {
         check = yt_validate(url_);
         return check !== false ? (('yt_' + check) as 'yt_video' | 'yt_playlist') : false;
     }
-}
-/**
- * Authorization interface for Spotify, SoundCloud and YouTube.
- *
- * Either stores info in `.data` folder or shows relevant data to be used in `setToken` function.
- *
- * ```ts
- * const play = require('play-dl')
- *
- * play.authorization()
- * ```
- *
- * Just run the above command and you will get a interface asking some questions.
- */
-function authorization(): void {
-    const ask = createInterface({
-        input: process.stdin,
-        output: process.stdout
-    });
-    ask.question('Do you want to save data in a file ? (Yes / No): ', (msg) => {
-        let file: boolean;
-        if (msg.toLowerCase() === 'yes') file = true;
-        else if (msg.toLowerCase() === 'no') file = false;
-        else {
-            console.log("That option doesn't exist. Try again...");
-            ask.close();
-            return;
-        }
-        ask.question('Choose your service - sc (for SoundCloud) / sp (for Spotify)  / yo (for YouTube): ', (msg) => {
-            if (msg.toLowerCase().startsWith('sp')) {
-                let client_id: string, client_secret: string, redirect_url: string, market: string;
-                ask.question('Start by entering your Client ID : ', (id) => {
-                    client_id = id;
-                    ask.question('Now enter your Client Secret : ', (secret) => {
-                        client_secret = secret;
-                        ask.question('Enter your Redirect URL now : ', (url) => {
-                            redirect_url = url;
-                            console.log(
-                                '\nIf you would like to know your region code visit : \nhttps://en.wikipedia.org/wiki/ISO_3166-1_alpha-2#Officially_assigned_code_elements \n'
-                            );
-                            ask.question('Enter your region code (2-letter country code) : ', (mar) => {
-                                if (mar.length === 2) market = mar;
-                                else {
-                                    console.log(
-                                        "That doesn't look like a valid region code, IN will be selected as default."
-                                    );
-                                    market = 'IN';
-                                }
-                                console.log(
-                                    '\nNow open your browser and paste the below url, then authorize it and copy the redirected url. \n'
-                                );
-                                console.log(
-                                    `https://accounts.spotify.com/authorize?client_id=${client_id}&response_type=code&redirect_uri=${encodeURI(
-                                        redirect_url
-                                    )} \n`
-                                );
-                                ask.question('Paste the url which you just copied : ', async (url) => {
-                                    if (!existsSync('.data')) mkdirSync('.data');
-                                    const spotifyData = {
-                                        client_id,
-                                        client_secret,
-                                        redirect_url,
-                                        authorization_code: url.split('code=')[1],
-                                        market
-                                    };
-                                    const check = await SpotifyAuthorize(spotifyData, file);
-                                    if (check === false) throw new Error('Failed to get access token.');
-                                    ask.close();
-                                });
-                            });
-                        });
-                    });
-                });
-            } else if (msg.toLowerCase().startsWith('sc')) {
-                if (!file) {
-                    console.log('You already had a client ID, just paste that in setToken function.');
-                    ask.close();
-                    return;
-                }
-                ask.question('Client ID : ', async (id) => {
-                    let client_id = id;
-                    if (!client_id) {
-                        console.log("You didn't provide a client ID. Try again...");
-                        ask.close();
-                        return;
-                    }
-                    if (!existsSync('.data')) mkdirSync('.data');
-                    console.log('Validating your client ID, hold on...');
-                    if (await check_id(client_id)) {
-                        console.log('Client ID has been validated successfully.');
-                        writeFileSync('.data/soundcloud.data', JSON.stringify({ client_id }, undefined, 4));
-                    } else console.log("That doesn't look like a valid client ID. Retry with a correct client ID.");
-                    ask.close();
-                });
-            } else if (msg.toLowerCase().startsWith('yo')) {
-                if (!file) {
-                    console.log('You already had cookie, just paste that in setToken function.');
-                    ask.close();
-                    return;
-                }
-                ask.question('Cookies : ', (cook: string) => {
-                    if (!cook || cook.length === 0) {
-                        console.log("You didn't provide a cookie. Try again...");
-                        ask.close();
-                        return;
-                    }
-                    if (!existsSync('.data')) mkdirSync('.data');
-                    console.log('Cookies has been added successfully.');
-                    let cookie: Object = {};
-                    cook.split(';').forEach((x) => {
-                        const arr = x.split('=');
-                        if (arr.length <= 1) return;
-                        const key = arr.shift()?.trim() as string;
-                        const value = arr.join('=').trim();
-                        Object.assign(cookie, { [key]: value });
-                    });
-                    writeFileSync('.data/youtube.data', JSON.stringify({ cookie }, undefined, 4));
-                    ask.close();
-                });
-            } else {
-                console.log("That option doesn't exist. Try again...");
-                ask.close();
-            }
-        });
-    });
+    return false;
 }
 /**
  * Attaches paused, playing, autoPaused Listeners to discordjs voice AudioPlayer.
@@ -468,46 +344,35 @@ function attachListeners(player: EventEmitter, resource: YouTubeStream | SoundCl
 
 // Export Main Commands
 export {
-    DeezerAlbum,
-    DeezerPlaylist,
-    DeezerTrack,
-    SoundCloudPlaylist,
-    SoundCloudStream,
-    SoundCloudTrack,
-    SpotifyAlbum,
-    SpotifyPlaylist,
-    SpotifyTrack,
-    YouTubeChannel,
-    YouTubePlayList,
-    YouTubeVideo,
     attachListeners,
     authorization,
     decipher_info,
-    deezer,
-    dz_advanced_track_search,
+    deezer, DeezerAlbum,
+    DeezerPlaylist,
+    DeezerTrack, dz_advanced_track_search,
     dz_validate,
     extractID,
-    getFreeClientID,
-    is_expired,
+    getFreeClientID, InfoData, is_expired,
     playlist_info,
     refreshToken,
     search,
     setToken,
     so_validate,
-    soundcloud,
-    spotify,
-    sp_validate,
-    stream,
+    soundcloud, SoundCloudPlaylist,
+    SoundCloudStream,
+    SoundCloudTrack, sp_validate, spotify, SpotifyAlbum,
+    SpotifyPlaylist,
+    SpotifyTrack, stream,
     stream_from_info,
     validate,
     video_basic_info,
-    video_info,
-    yt_validate,
-    InfoData
+    video_info, YouTubeChannel,
+    YouTubePlayList,
+    YouTubeVideo, yt_validate
 };
 
 // Export Types
-export { Deezer, YouTube, SoundCloud, Spotify, YouTubeStream };
+    export { Deezer, SoundCloud, Spotify, YouTube, YouTubeStream };
 
 // Export Default
 export default {
