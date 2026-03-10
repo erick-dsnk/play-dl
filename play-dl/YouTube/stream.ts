@@ -1,17 +1,14 @@
+import { URL } from 'node:url';
 import { request_content_length, request_stream } from '../Request';
+import { StreamType } from '../common/types';
 import { LiveStream, Stream } from './classes/LiveStream';
 import { SeekStream } from './classes/SeekStream';
 import { InfoData, StreamInfoData } from './utils/constants';
-import { video_stream_info } from './utils/extractor';
-import { URL } from 'node:url';
+import { parseAudioFormats } from './utils/format';
+import { video_stream_info } from './utils/videoInfo';
 
-export enum StreamType {
-    Arbitrary = 'arbitrary',
-    Raw = 'raw',
-    OggOpus = 'ogg/opus',
-    WebmOpus = 'webm/opus',
-    Opus = 'opus'
-}
+export { parseAudioFormats } from './utils/format';
+export { StreamType };
 
 export interface StreamOptions {
     seek?: number;
@@ -20,24 +17,6 @@ export interface StreamOptions {
     htmldata?: boolean;
     precache?: number;
     discordPlayerCompatibility?: boolean;
-}
-
-/**
- * Command to find audio formats from given format array
- * @param formats Formats to search from
- * @returns Audio Formats array
- */
-export function parseAudioFormats(formats: any[]) {
-    const result: any[] = [];
-    formats.forEach((format) => {
-        const type = format.mimeType as string;
-        if (type.startsWith('audio')) {
-            format.codec = type.split('codecs="')[1].split('"')[0];
-            format.container = type.split('audio/')[1].split(';')[0];
-            result.push(format);
-        }
-    });
-    return result;
 }
 /**
  * Type for YouTube Stream
@@ -65,8 +44,7 @@ export async function stream_from_info(
 ): Promise<YouTubeStream> {
     if (info.format.length === 0)
         throw new Error('Upcoming and premiere videos that are not currently live cannot be streamed.');
-    if (options.quality && !Number.isInteger(options.quality))
-        throw new Error("Quality must be set to an integer.")
+    if (options.quality && !Number.isInteger(options.quality)) throw new Error('Quality must be set to an integer.');
 
     const final: any[] = [];
     if (
