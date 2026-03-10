@@ -1,5 +1,7 @@
 import { YouTubeVideo } from '../classes/Video';
 
+export const DEFAULT_API_KEY = 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
+
 export interface LiveStreamData {
     isLive: boolean;
     dashManifestUrl: string | null;
