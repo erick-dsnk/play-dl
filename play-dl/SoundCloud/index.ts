@@ -11,6 +11,11 @@ interface SoundDataOptions {
     client_id: string;
 }
 
+export interface SoundCloudStreamOptions {
+    quality?: number;
+    seek?: number;
+}
+
 const pattern = /^(?:(https?):\/\/)?(?:(?:www|m)\.)?(api\.soundcloud\.com|soundcloud\.com|snd\.sc)\/(.*)$/;
 /**
  * Gets info from a soundcloud url.
@@ -77,15 +82,27 @@ export async function so_search(
 /**
  * Main Function for creating a Stream of soundcloud
  * @param url soundcloud url
- * @param quality Quality to select from
+ * @param qualityOrOptions Quality index or options (quality, seek). Backward compatible: passing a number is treated as quality.
  * @returns SoundCloud Stream
  */
-export async function stream(url: string, quality?: number): Promise<SoundCloudStream> {
+export async function stream(
+    url: string,
+    qualityOrOptions?: number | SoundCloudStreamOptions
+): Promise<SoundCloudStream> {
+    const options: SoundCloudStreamOptions =
+        typeof qualityOrOptions === 'number' ? { quality: qualityOrOptions } : qualityOrOptions ?? {};
+
     const data = await soundcloud(url);
 
     if (data instanceof SoundCloudPlaylist) throw new Error("Streams can't be created from playlist urls");
 
+    if (options.seek != null) {
+        if (options.seek < 0 || options.seek >= data.durationInSec)
+            throw new Error(`Seeking beyond limit. [ 0 - ${data.durationInSec - 1}]`);
+    }
+
     const HLSformats = parseHlsFormats(data.formats);
+    let quality = options.quality;
     if (typeof quality !== 'number') quality = HLSformats.length - 1;
     else if (quality <= 0) quality = 0;
     else if (quality >= HLSformats.length) quality = HLSformats.length - 1;
@@ -94,7 +111,10 @@ export async function stream(url: string, quality?: number): Promise<SoundCloudS
     const type = HLSformats[quality].format.mime_type.startsWith('audio/ogg')
         ? StreamType.OggOpus
         : StreamType.Arbitrary;
-    return new SoundCloudStream(s_data.url, type);
+    return new SoundCloudStream(s_data.url, type, {
+        seek: options.seek,
+        durationInSec: data.durationInSec
+    });
 }
 /**
  * Gets Free SoundCloud Client ID.
@@ -128,11 +148,23 @@ export async function getFreeClientID(): Promise<string> {
 /**
  * Function for creating a Stream of soundcloud using a SoundCloud Track Class
  * @param data SoundCloud Track Class
- * @param quality Quality to select from
+ * @param qualityOrOptions Quality index or options (quality, seek). Backward compatible: passing a number is treated as quality.
  * @returns SoundCloud Stream
  */
-export async function stream_from_info(data: SoundCloudTrack, quality?: number): Promise<SoundCloudStream> {
+export async function stream_from_info(
+    data: SoundCloudTrack,
+    qualityOrOptions?: number | SoundCloudStreamOptions
+): Promise<SoundCloudStream> {
+    const options: SoundCloudStreamOptions =
+        typeof qualityOrOptions === 'number' ? { quality: qualityOrOptions } : qualityOrOptions ?? {};
+
+    if (options.seek != null) {
+        if (options.seek < 0 || options.seek >= data.durationInSec)
+            throw new Error(`Seeking beyond limit. [ 0 - ${data.durationInSec - 1}]`);
+    }
+
     const HLSformats = parseHlsFormats(data.formats);
+    let quality = options.quality;
     if (typeof quality !== 'number') quality = HLSformats.length - 1;
     else if (quality <= 0) quality = 0;
     else if (quality >= HLSformats.length) quality = HLSformats.length - 1;
@@ -141,7 +173,10 @@ export async function stream_from_info(data: SoundCloudTrack, quality?: number):
     const type = HLSformats[quality].format.mime_type.startsWith('audio/ogg')
         ? StreamType.OggOpus
         : StreamType.Arbitrary;
-    return new SoundCloudStream(s_data.url, type);
+    return new SoundCloudStream(s_data.url, type, {
+        seek: options.seek,
+        durationInSec: data.durationInSec
+    });
 }
 /**
  * Function to check client ID
@@ -198,4 +233,3 @@ export function setSoundCloudToken(options: SoundDataOptions) {
 }
 
 export { SoundCloudPlaylist, SoundCloudStream, SoundCloudTrack };
-
