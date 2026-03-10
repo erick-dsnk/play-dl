@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { StreamType } from '../YouTube/stream';
+import { StreamType } from '../common/types';
 import { request } from '../Request';
-import { SoundCloudPlaylist, SoundCloudTrack, SoundCloudTrackFormat, SoundCloudStream } from './classes';
+import { SoundCloudPlaylist, SoundCloudStream, SoundCloudTrack, SoundCloudTrackFormat } from './classes';
 let soundData: SoundDataOptions;
 if (existsSync('.data/soundcloud.data')) {
     soundData = JSON.parse(readFileSync('.data/soundcloud.data', 'utf-8'));
@@ -111,10 +111,9 @@ export async function stream(url: string, quality?: number): Promise<SoundCloudS
  * @returns client ID
  */
 export async function getFreeClientID(): Promise<string> {
-    const data: any = await request('https://soundcloud.com/', {headers: {}}).catch(err => err);
+    const data: any = await request('https://soundcloud.com/', { headers: {} }).catch((err) => err);
 
-    if (data instanceof Error)
-        throw new Error("Failed to get response from soundcloud.com: " + data.message);
+    if (data instanceof Error) throw new Error('Failed to get response from soundcloud.com: ' + data.message);
 
     const splitted = data.split('<script crossorigin src="');
     const urls: string[] = [];
@@ -198,4 +197,5 @@ export function setSoundCloudToken(options: SoundDataOptions) {
     soundData = options;
 }
 
-export { SoundCloudTrack, SoundCloudPlaylist, SoundCloudStream };
+export { SoundCloudPlaylist, SoundCloudStream, SoundCloudTrack };
+
