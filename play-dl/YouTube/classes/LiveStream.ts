@@ -1,9 +1,10 @@
-import { Readable } from 'node:stream';
 import { IncomingMessage } from 'node:http';
-import { parseAudioFormats, StreamOptions, StreamType } from '../stream';
-import { request, request_stream } from '../../Request';
-import { video_stream_info } from '../utils/extractor';
+import { Readable } from 'node:stream';
 import { URL } from 'node:url';
+import { request, request_stream } from '../../Request';
+import { StreamOptions, StreamType } from '../stream';
+import { parseAudioFormats } from '../utils/format';
+import { video_stream_info } from '../utils/videoInfo';
 
 /**
  * YouTube Live Stream class for playing audio from Live Stream videos.
