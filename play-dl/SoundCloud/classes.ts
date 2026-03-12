@@ -408,9 +408,14 @@ export class SoundCloudStream {
      */
     private time: number[];
     /**
-     * Array of segment_urls in dash file.
+     * Array of segment_urls in dash file (media segments only, 1:1 with time[]).
      */
     private segment_urls: string[];
+    /**
+     * Optional init segment URL from #EXT-X-MAP. Must be sent first for decoders to work; never skipped when seeking.
+     * @private
+     */
+    private initSegmentUrl: string | null;
     /**
      * Seek position in seconds. When set, segments before this time are skipped on start.
      * @private
@@ -434,19 +439,21 @@ export class SoundCloudStream {
         this.request = null;
         this.downloaded_segments = 0;
         this.time = [];
+        this.segment_urls = [];
+        this.initSegmentUrl = null;
         this.seekSeconds = seekOptions?.seek ?? 0;
         this.timer = new Timer(() => {
             this.timer.reuse();
             this.start();
         }, 280);
-        this.segment_urls = [];
         this.stream.on('close', () => {
             this.cleanup();
         });
         this.start();
     }
     /**
-     * Parses SoundCloud dash file.
+     * Parses SoundCloud HLS manifest. Pairs each #EXTINF duration with the next URL so time[] and segment_urls[]
+     * stay aligned. Captures optional #EXT-X-MAP init segment so it is always sent first and never skipped when seeking.
      * @private
      */
     private async parser() {
@@ -455,17 +462,29 @@ export class SoundCloudStream {
         });
         if (response instanceof Error) throw response;
         const array = response.split('\n');
-        array.forEach((val) => {
-            if (val.startsWith('#EXTINF:')) {
-                this.time.push(parseFloat(val.replace('#EXTINF:', '')));
-            } else if (val.startsWith('https')) {
-                this.segment_urls.push(val);
+        let lastDuration: number | null = null;
+        for (const raw of array) {
+            const val = raw.trim();
+            if (val.startsWith('#EXT-X-MAP:')) {
+                const match = /URI="([^"]+)"/.exec(val);
+                if (match) this.initSegmentUrl = match[1];
+            } else if (val.startsWith('#EXTINF:')) {
+                lastDuration = parseFloat(val.replace('#EXTINF:', '').trim());
+            } else if (val.startsWith('http')) {
+                if (lastDuration !== null) {
+                    this.time.push(lastDuration);
+                    this.segment_urls.push(val);
+                    lastDuration = null;
+                } else if (this.initSegmentUrl === null) {
+                    this.initSegmentUrl = val;
+                }
             }
-        });
+        }
         return;
     }
     /**
-     * Starts looping of code for getting all segments urls data
+     * Starts looping of code for getting all segments urls data.
+     * When seeking, only media segments are skipped; init segment (if any) is never skipped.
      */
     private async start() {
         if (this.stream.destroyed) {
@@ -474,6 +493,7 @@ export class SoundCloudStream {
         }
         this.time = [];
         this.segment_urls = [];
+        this.initSegmentUrl = null;
         this.downloaded_time = 0;
         this.downloaded_segments = 0;
         await this.parser();
@@ -493,11 +513,27 @@ export class SoundCloudStream {
         this.loop();
     }
     /**
-     * Main Loop function for getting all segments urls data
+     * Main Loop function for getting all segments urls data.
+     * Sends init segment first if present (required for decoders when using seek), then media segments.
      */
     private async loop() {
         if (this.stream.destroyed) {
             this.cleanup();
+            return;
+        }
+        if (this.initSegmentUrl) {
+            const initUrl = this.initSegmentUrl;
+            this.initSegmentUrl = null;
+            const stream = await request_stream(initUrl).catch((err: Error) => err);
+            if (stream instanceof Error) {
+                this.stream.emit('error', stream);
+                this.cleanup();
+                return;
+            }
+            this.request = stream;
+            stream.on('data', (c) => this.stream.push(c));
+            stream.on('end', () => this.loop());
+            stream.once('error', (err) => this.stream.emit('error', err));
             return;
         }
         if (this.time.length === 0 || this.segment_urls.length === 0) {
@@ -538,6 +574,7 @@ export class SoundCloudStream {
         this.downloaded_time = 0;
         this.downloaded_segments = 0;
         this.request = null;
+        this.initSegmentUrl = null;
         this.time = [];
         this.segment_urls = [];
     }
